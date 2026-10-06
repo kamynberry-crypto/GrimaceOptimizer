@@ -1,64 +1,34 @@
-# Grimace Optimizer
+# Grimace Optimizer v1.2.0
 
-A Windows x64 Fortnite-focused optimizer/launcher with a dark purple UI.
+Native Windows x64 Fortnite-focused optimizer and launcher with the same dark Grimace UI. No Python and no backup/restore module.
 
-## What it does
-- Automatically detects CPU, GPU, RAM, and system-drive usage.
-- Enables the Windows High Performance power plan.
-- Enables Game Mode and disables background Game DVR capture.
-- Requests Hardware-Accelerated GPU Scheduling (Windows restart may be required).
-- Tunes Windows multimedia game scheduling priority.
-- Provides selectable optimizer options so you can choose which Windows/Fortnite changes to apply.
-- Uses medium texture quality for GPUs like the GTX 1660 Ti 6 GB while lowering expensive effects/shadows.
-- Sets Fortnite matchmaking to **Auto**, which Epic recommends for best ping.
-- Measures regional network latency and displays an estimate of the closest region.
-- Launches Fortnite through the Epic Games Launcher URI and sets Fortnite's process priority to High after launch.
-- Deletes only temp files older than two days that are not locked.
-- Shows the installed app version and checks GitHub Releases automatically at startup.
-- Includes a **Check for Updates** button and can download/install a newer `GrimaceOptimizer.exe` release automatically.
-
-There is intentionally **no backup or restore module** and no Python dependency.
-
-## Optimizer options
-The dashboard keeps the same Grimace design and adds selectable options:
+## v1.2.0 options
 - High Performance power plan
 - Windows Game Mode
 - Disable background Game DVR capture
 - Hardware-Accelerated GPU Scheduling request
-- Windows gaming priority tuning
-- Fortnite FPS/performance profile
+- Windows multimedia gaming priority tuning
+- Fortnite FPS profile (low effects/shadows, medium textures for 6 GB VRAM, VSync off, matchmaking Auto)
 - Old temporary-file cleanup
 - High-priority Fortnite launch
+- Disable Xbox Game Bar overlay startup
+- Clear DirectX/NVIDIA shader cache (optional; caches rebuild afterward)
+- Flush DNS cache
+- Windows visual-effects performance profile
 
-All options are enabled by default, but you can turn individual options off before pressing **OPTIMIZE SELECTED**. There is still no backup/restore module.
+The last four are optional and disabled by default because they can have tradeoffs. The app does not claim a guaranteed FPS increase.
 
-## Enable GitHub updates
-1. Create a public GitHub repository for this project, for example `GrimaceOptimizer`.
-2. Open `UpdateService.cs`.
-3. Replace:
-   - `YOUR_GITHUB_USERNAME` with your GitHub username.
-   - `GrimaceOptimizer` if your repository has a different name.
-4. Commit and push the project.
-5. Increase the `<Version>`, `<AssemblyVersion>`, `<FileVersion>`, and `<InformationalVersion>` values in `GrimaceOptimizer.csproj` when doing a local release (for example 1.1.0).
-6. Create a Git tag/release such as `v1.1.0`.
-7. The included GitHub Actions workflow automatically builds a self-contained `GrimaceOptimizer.exe` and attaches it to the release.
-8. Installed copies of Grimace will detect the release automatically on startup or when **Check for Updates** is pressed.
+## Hardware
+Automatically detects CPU, GPU, RAM, system-drive usage, and Windows version. The UI is tuned for the supplied Ryzen 5 3600 + GTX 1660 Ti 6 GB + 16 GB RAM hardware, but the detector works on other Windows PCs too.
 
-The updater looks for a GitHub release asset named exactly `GrimaceOptimizer.exe`.
+## Region
+The app measures regional network endpoints and displays an estimate. Fortnite remains on **Auto** so Epic can select the live server with the best ping; the probe is not a guarantee of in-game ping.
 
-## Build a standalone EXE
-1. On Windows, install the x64 .NET 8 SDK or newer.
-2. Double-click `build.bat`.
-3. The self-contained EXE will be created at:
-   `bin\\Release\\net8.0-windows\\win-x64\\publish\\GrimaceOptimizer.exe`
+## Updates
+The updater is configured for `kamynberry-crypto/GrimaceOptimizer` and checks GitHub Releases at startup or through **Check for Updates**. Releases must include an asset named exactly `GrimaceOptimizer.exe`.
 
-The published EXE is self-contained and does not need .NET installed on the target PC.
+For a new version, update the four version fields in `GrimaceOptimizer.csproj`, commit the changes, and create a GitHub release/tag such as `v1.2.0`. The included Actions workflow builds a self-contained Windows x64 EXE and attaches it to the release.
 
-## Release versions
-Keep the project version in `GrimaceOptimizer.csproj` aligned with the release tag for local builds. For GitHub releases, the included workflow takes the version from the tag automatically.
-
-## Notes
-- The app requests administrator permission because power/GPU scheduling settings are system-level.
-- Fortnite should be launched once before optimization so its config file exists.
-- Region measurements are estimates from regional network endpoints, not Epic's private game servers. Fortnite itself remains on Auto so Epic can select the live server with the best ping.
-- FPS gains vary by map, Fortnite version, background apps, drivers, temperatures, and in-game render mode.
+## Build
+Install the .NET 8 SDK on Windows, then run `build.bat`. The standalone EXE is created at:
+`bin\\Release\\net8.0-windows\\win-x64\\publish\\GrimaceOptimizer.exe`

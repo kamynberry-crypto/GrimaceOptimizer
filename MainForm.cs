@@ -13,6 +13,7 @@ internal sealed class MainForm : Form
     private readonly Label cpu = new(), gpu = new(), ram = new(), storage = new(), region = new();
     private readonly Button optimize = new(), launch = new(), retest = new(), updateButton = new();
     private readonly CheckBox powerPlan = new(), gameMode = new(), captureOff = new(), gpuScheduling = new(), gamingPriority = new(), fortniteProfile = new(), tempCleanup = new(), highPriorityLaunch = new();
+    private readonly CheckBox xboxOverlay = new(), shaderCache = new(), flushDns = new(), visualEffects = new();
     private readonly Label status = new(), version = new();
 
     public MainForm()
@@ -20,18 +21,14 @@ internal sealed class MainForm : Form
         Text = "Grimace Optimizer";
         StartPosition = FormStartPosition.CenterScreen;
         MinimumSize = new Size(920, 650);
-        Size = new Size(1050, 720);
+        Size = new Size(1050, 840);
         BackColor = Bg;
         ForeColor = Color.White;
         Font = new Font("Segoe UI", 10f);
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         BuildUi();
-        Shown += async (_, _) =>
-        {
-            await InitialScanAsync();
-            await CheckForUpdatesAsync(true);
-        };
+        Shown += async (_, _) => { await InitialScanAsync(); await CheckForUpdatesAsync(true); };
     }
 
     private void BuildUi()
@@ -47,12 +44,12 @@ internal sealed class MainForm : Form
 
         var netCard = Card("LOW-PING REGION", 525, 115, 475, 180);
         region.Text = "Testing regional latency…"; region.ForeColor = Color.White; region.Font = new Font("Segoe UI", 14, FontStyle.Bold); region.SetBounds(25, 60, 420, 35); netCard.Controls.Add(region);
-        var netInfo = new Label { Text = "Fortnite is set to Auto so Epic can choose the live server with the best ping. The estimate below uses regional network probes.", ForeColor = Muted, AutoSize = false, Size = new Size(415, 50), Location = new Point(25, 100) };
+        var netInfo = new Label { Text = "Fortnite stays on Auto so Epic can choose the live server with the best ping. The estimate below uses regional network probes.", ForeColor = Muted, AutoSize = false, Size = new Size(415, 50), Location = new Point(25, 100) };
         netCard.Controls.Add(netInfo);
         retest.Text = "Retest"; StyleButton(retest, false); retest.SetBounds(360, 25, 85, 34); retest.Click += async (_, _) => await TestRegionAsync(); netCard.Controls.Add(retest);
 
-        var actionCard = Card("ONE-CLICK PERFORMANCE", 525, 315, 475, 250);
-        var desc = new Label { Text = "Choose exactly what Grimace should optimize. Your selections are applied only when you press Optimize.", ForeColor = Muted, AutoSize = false, Size = new Size(420, 32), Location = new Point(25, 50) };
+        var actionCard = Card("ONE-CLICK PERFORMANCE", 525, 315, 475, 300);
+        var desc = new Label { Text = "Pick the changes Grimace should apply. Safer cosmetic/cache options are optional.", ForeColor = Muted, AutoSize = false, Size = new Size(420, 32), Location = new Point(25, 50) };
         actionCard.Controls.Add(desc);
 
         ConfigureOption(powerPlan, "High Performance power", 25, 82, true);
@@ -63,32 +60,30 @@ internal sealed class MainForm : Form
         ConfigureOption(fortniteProfile, "Fortnite FPS profile", 235, 138, true);
         ConfigureOption(tempCleanup, "Clean old temp files", 25, 166, true);
         ConfigureOption(highPriorityLaunch, "High-priority Fortnite launch", 235, 166, true);
-        foreach (var option in new[] { powerPlan, gameMode, captureOff, gpuScheduling, gamingPriority, fortniteProfile, tempCleanup, highPriorityLaunch })
+        ConfigureOption(xboxOverlay, "Disable Xbox overlay startup", 25, 194, true);
+        ConfigureOption(shaderCache, "Clear graphics shader cache", 235, 194, false);
+        ConfigureOption(flushDns, "Flush DNS cache", 25, 222, false);
+        ConfigureOption(visualEffects, "Windows visual effects", 235, 222, false);
+
+        foreach (var option in new[] { powerPlan, gameMode, captureOff, gpuScheduling, gamingPriority, fortniteProfile, tempCleanup, highPriorityLaunch, xboxOverlay, shaderCache, flushDns, visualEffects })
             actionCard.Controls.Add(option);
 
-        optimize.Text = "⚡  OPTIMIZE SELECTED"; StyleButton(optimize, true); optimize.SetBounds(25, 201, 200, 38); optimize.Click += async (_, _) => await OptimizeAsync(); actionCard.Controls.Add(optimize);
-        launch.Text = "▶  LAUNCH FORTNITE"; StyleButton(launch, false); launch.SetBounds(240, 201, 205, 38); launch.Click += (_, _) => LaunchFortnite(); actionCard.Controls.Add(launch);
+        optimize.Text = "⚡  OPTIMIZE SELECTED"; StyleButton(optimize, true); optimize.SetBounds(25, 257, 200, 38); optimize.Click += async (_, _) => await OptimizeAsync(); actionCard.Controls.Add(optimize);
+        launch.Text = "▶  LAUNCH FORTNITE"; StyleButton(launch, false); launch.SetBounds(240, 257, 205, 38); launch.Click += (_, _) => LaunchFortnite(); actionCard.Controls.Add(launch);
 
         var logCard = Card("ACTIVITY", 35, 445, 470, 220);
         logPanel.FlowDirection = FlowDirection.TopDown; logPanel.WrapContents = false; logPanel.AutoScroll = true; logPanel.BackColor = Panel; logPanel.SetBounds(20, 48, 430, 145); logCard.Controls.Add(logPanel);
 
-        status.Text = "Ready"; status.ForeColor = Muted; status.AutoSize = true; status.Location = new Point(550, 590); Controls.Add(status);
-
-        version.Text = UpdateService.VersionText; version.ForeColor = Color.FromArgb(125, 115, 145); version.AutoSize = true; version.Location = new Point(35, 590); Controls.Add(version);
-        updateButton.Text = "Check for Updates"; StyleButton(updateButton, false); updateButton.SetBounds(35, 615, 165, 34); updateButton.Click += async (_, _) => await CheckForUpdatesAsync(false); Controls.Add(updateButton);
-        var foot = new Label { Text = "No backup/restore module • No Python • Native Windows x64 build", ForeColor = Color.FromArgb(115, 106, 134), AutoSize = true, Location = new Point(550, 625) }; Controls.Add(foot);
+        status.Text = "Ready"; status.ForeColor = Muted; status.AutoSize = true; status.Location = new Point(550, 680); Controls.Add(status);
+        version.Text = UpdateService.VersionText; version.ForeColor = Color.FromArgb(125, 115, 145); version.AutoSize = true; version.Location = new Point(35, 680); Controls.Add(version);
+        updateButton.Text = "Check for Updates"; StyleButton(updateButton, false); updateButton.SetBounds(35, 710, 165, 34); updateButton.Click += async (_, _) => await CheckForUpdatesAsync(false); Controls.Add(updateButton);
+        var foot = new Label { Text = "No backup/restore module • No Python • Native Windows x64 build", ForeColor = Color.FromArgb(115, 106, 134), AutoSize = true, Location = new Point(550, 715) }; Controls.Add(foot);
     }
 
     private void ConfigureOption(CheckBox box, string text, int x, int y, bool enabledByDefault)
     {
-        box.Text = text;
-        box.Checked = enabledByDefault;
-        box.AutoSize = false;
-        box.Size = new Size(205, 25);
-        box.Location = new Point(x, y);
-        box.ForeColor = Color.White;
-        box.BackColor = Panel;
-        box.Font = new Font("Segoe UI", 8.5f, FontStyle.Regular);
+        box.Text = text; box.Checked = enabledByDefault; box.AutoSize = false; box.Size = new Size(205, 25); box.Location = new Point(x, y);
+        box.ForeColor = Color.White; box.BackColor = Panel; box.Font = new Font("Segoe UI", 8.5f, FontStyle.Regular);
     }
 
     private Panel Card(string heading, int x, int y, int w, int h)
@@ -105,74 +100,43 @@ internal sealed class MainForm : Form
         b.Font = new Font("Segoe UI", 10, FontStyle.Bold); b.Cursor = Cursors.Hand;
     }
 
-
     private async Task CheckForUpdatesAsync(bool silent)
     {
         if (!UpdateService.IsConfigured)
         {
-            if (!silent)
-                MessageBox.Show(
-                    "GitHub updates are not configured yet. Open UpdateService.cs and replace YOUR_GITHUB_USERNAME with your GitHub username.",
-                    "Grimace Optimizer Updates", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            if (!silent) MessageBox.Show("GitHub updates are not configured yet.", "Grimace Optimizer Updates", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
-
-        updateButton.Enabled = false;
-        status.Text = "Checking for updates…";
+        updateButton.Enabled = false; status.Text = "Checking for updates…";
         try
         {
             var update = await UpdateService.CheckAsync();
             if (update is null)
             {
                 status.Text = "Up to date";
-                if (!silent)
-                    MessageBox.Show($"You're running the latest version ({UpdateService.VersionText}).", "Grimace Optimizer", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                if (!silent) MessageBox.Show($"You're running the latest version ({UpdateService.VersionText}).", "Grimace Optimizer", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
-
-            var answer = MessageBox.Show(
-                $"Grimace Optimizer {update.TagName} is available.\n\nYou have {UpdateService.VersionText}.\n\nDownload and install it now?",
-                "Grimace Optimizer Update", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
-
-            if (answer != DialogResult.Yes)
-            {
-                status.Text = $"Update available: {update.TagName}";
-                return;
-            }
-
-            var progress = new Progress<string>(message =>
-            {
-                status.Text = message;
-                Log(message);
-            });
+            var answer = MessageBox.Show($"Grimace Optimizer {update.TagName} is available.\n\nYou have {UpdateService.VersionText}.\n\nDownload and install it now?", "Grimace Optimizer Update", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
+            if (answer != DialogResult.Yes) { status.Text = $"Update available: {update.TagName}"; return; }
+            var progress = new Progress<string>(message => { status.Text = message; Log(message); });
             await UpdateService.DownloadAndStageAsync(update, progress);
-            status.Text = "Update downloaded — restarting…";
-            Log($"Installing {update.TagName}. Grimace will restart automatically.");
-            await Task.Delay(600);
-            Application.Exit();
+            status.Text = "Update downloaded — restarting…"; Log($"Installing {update.TagName}. Grimace will restart automatically."); await Task.Delay(600); Application.Exit();
         }
         catch (Exception ex)
         {
-            status.Text = "Update check failed";
-            Log("Update error: " + ex.Message);
-            if (!silent)
-                MessageBox.Show("Could not check for updates.\n\n" + ex.Message, "Grimace Optimizer Updates", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            status.Text = "Update check failed"; Log("Update error: " + ex.Message);
+            if (!silent) MessageBox.Show("Could not check for updates.\n\n" + ex.Message, "Grimace Optimizer Updates", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
-        finally
-        {
-            updateButton.Enabled = true;
-        }
+        finally { updateButton.Enabled = true; }
     }
 
     private async Task InitialScanAsync()
     {
         Log("Detecting hardware automatically…");
-        var hwTask = HardwareInfo.DetectAsync();
-        var regionTask = TestRegionAsync();
-        var hw = await hwTask;
+        var hwTask = HardwareInfo.DetectAsync(); var regionTask = TestRegionAsync(); var hw = await hwTask;
         cpu.Text = $"CPU   {hw.Cpu}"; gpu.Text = $"GPU   {hw.Gpu}"; ram.Text = $"RAM   {hw.Ram}"; storage.Text = $"STORAGE   {hw.Storage}";
-        Log("Hardware detection complete.");
-        await regionTask;
+        Log("Hardware detection complete."); await regionTask;
     }
 
     private async Task TestRegionAsync()
@@ -192,16 +156,15 @@ internal sealed class MainForm : Form
         {
             var options = new OptimizationOptions(
                 powerPlan.Checked, gameMode.Checked, captureOff.Checked, gpuScheduling.Checked,
-                gamingPriority.Checked, fortniteProfile.Checked, tempCleanup.Checked);
+                gamingPriority.Checked, fortniteProfile.Checked, tempCleanup.Checked,
+                xboxOverlay.Checked, shaderCache.Checked, flushDns.Checked, visualEffects.Checked,
+                highPriorityLaunch.Checked);
             var changes = await Optimizer.ApplyAsync(options, progress);
             Optimizer.SetFortniteAutoRegion(progress);
             status.Text = $"Optimization complete • {changes.Count} actions applied";
             Log("Done. Restart Windows if GPU scheduling was changed.");
         }
-        catch (Exception ex)
-        {
-            status.Text = "Optimization finished with an error"; Log("Error: " + ex.Message);
-        }
+        catch (Exception ex) { status.Text = "Optimization finished with an error"; Log("Error: " + ex.Message); }
         finally { optimize.Enabled = true; launch.Enabled = true; }
     }
 
@@ -209,10 +172,8 @@ internal sealed class MainForm : Form
     {
         try
         {
-            Optimizer.SetFortniteAutoRegion(new Progress<string>(Log));
-            Optimizer.LaunchFortnite(highPriorityLaunch.Checked);
-            status.Text = "Fortnite launch requested through Epic Games Launcher";
-            Log("Launching Fortnite; process priority will switch to High after the game starts.");
+            Optimizer.SetFortniteAutoRegion(new Progress<string>(Log)); Optimizer.LaunchFortnite(highPriorityLaunch.Checked);
+            status.Text = "Fortnite launch requested through Epic Games Launcher"; Log("Launching Fortnite; process priority will switch to High after the game starts if selected.");
         }
         catch (Exception ex) { Log("Launch failed: " + ex.Message); }
     }
