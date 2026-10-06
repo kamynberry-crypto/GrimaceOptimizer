@@ -8,7 +8,7 @@ A Windows x64 Fortnite-focused optimizer/launcher with a dark purple UI.
 - Enables Game Mode and disables background Game DVR capture.
 - Requests Hardware-Accelerated GPU Scheduling (Windows restart may be required).
 - Tunes Windows multimedia game scheduling priority.
-- Applies a conservative Fortnite performance preset in `GameUserSettings.ini` while preserving the rest of the file.
+- Provides selectable optimizer options so you can choose which Windows/Fortnite changes to apply.
 - Uses medium texture quality for GPUs like the GTX 1660 Ti 6 GB while lowering expensive effects/shadows.
 - Sets Fortnite matchmaking to **Auto**, which Epic recommends for best ping.
 - Measures regional network latency and displays an estimate of the closest region.
@@ -19,6 +19,19 @@ A Windows x64 Fortnite-focused optimizer/launcher with a dark purple UI.
 
 There is intentionally **no backup or restore module** and no Python dependency.
 
+## Optimizer options
+The dashboard keeps the same Grimace design and adds selectable options:
+- High Performance power plan
+- Windows Game Mode
+- Disable background Game DVR capture
+- Hardware-Accelerated GPU Scheduling request
+- Windows gaming priority tuning
+- Fortnite FPS/performance profile
+- Old temporary-file cleanup
+- High-priority Fortnite launch
+
+All options are enabled by default, but you can turn individual options off before pressing **OPTIMIZE SELECTED**. There is still no backup/restore module.
+
 ## Enable GitHub updates
 1. Create a public GitHub repository for this project, for example `GrimaceOptimizer`.
 2. Open `UpdateService.cs`.
@@ -26,9 +39,10 @@ There is intentionally **no backup or restore module** and no Python dependency.
    - `YOUR_GITHUB_USERNAME` with your GitHub username.
    - `GrimaceOptimizer` if your repository has a different name.
 4. Commit and push the project.
-5. Create releases with tags such as `v1.0.1`, `v1.1.0`, etc.
-6. The included GitHub Actions workflow automatically builds a self-contained `GrimaceOptimizer.exe` and attaches it to the release.
-7. Installed copies of Grimace will detect the release automatically on startup or when **Check for Updates** is pressed.
+5. Increase the `<Version>`, `<AssemblyVersion>`, `<FileVersion>`, and `<InformationalVersion>` values in `GrimaceOptimizer.csproj` when doing a local release (for example 1.1.0).
+6. Create a Git tag/release such as `v1.1.0`.
+7. The included GitHub Actions workflow automatically builds a self-contained `GrimaceOptimizer.exe` and attaches it to the release.
+8. Installed copies of Grimace will detect the release automatically on startup or when **Check for Updates** is pressed.
 
 The updater looks for a GitHub release asset named exactly `GrimaceOptimizer.exe`.
 

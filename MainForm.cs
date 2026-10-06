@@ -12,6 +12,7 @@ internal sealed class MainForm : Form
     private readonly FlowLayoutPanel logPanel = new();
     private readonly Label cpu = new(), gpu = new(), ram = new(), storage = new(), region = new();
     private readonly Button optimize = new(), launch = new(), retest = new(), updateButton = new();
+    private readonly CheckBox powerPlan = new(), gameMode = new(), captureOff = new(), gpuScheduling = new(), gamingPriority = new(), fortniteProfile = new(), tempCleanup = new(), highPriorityLaunch = new();
     private readonly Label status = new(), version = new();
 
     public MainForm()
@@ -51,10 +52,22 @@ internal sealed class MainForm : Form
         retest.Text = "Retest"; StyleButton(retest, false); retest.SetBounds(360, 25, 85, 34); retest.Click += async (_, _) => await TestRegionAsync(); netCard.Controls.Add(retest);
 
         var actionCard = Card("ONE-CLICK PERFORMANCE", 525, 315, 475, 250);
-        var desc = new Label { Text = "Applies a Fortnite-focused profile for your detected PC: High Performance power mode, Game Mode, capture-off, GPU scheduling request, game scheduling priority, low-cost Fortnite graphics, medium textures for 6 GB VRAM, and old temp-file cleanup.", ForeColor = Muted, AutoSize = false, Size = new Size(420, 88), Location = new Point(25, 52) };
+        var desc = new Label { Text = "Choose exactly what Grimace should optimize. Your selections are applied only when you press Optimize.", ForeColor = Muted, AutoSize = false, Size = new Size(420, 32), Location = new Point(25, 50) };
         actionCard.Controls.Add(desc);
-        optimize.Text = "⚡  OPTIMIZE MY PC"; StyleButton(optimize, true); optimize.SetBounds(25, 150, 200, 52); optimize.Click += async (_, _) => await OptimizeAsync(); actionCard.Controls.Add(optimize);
-        launch.Text = "▶  LAUNCH FORTNITE"; StyleButton(launch, false); launch.SetBounds(240, 150, 205, 52); launch.Click += (_, _) => LaunchFortnite(); actionCard.Controls.Add(launch);
+
+        ConfigureOption(powerPlan, "High Performance power", 25, 82, true);
+        ConfigureOption(gameMode, "Windows Game Mode", 235, 82, true);
+        ConfigureOption(captureOff, "Disable background capture", 25, 110, true);
+        ConfigureOption(gpuScheduling, "Hardware GPU scheduling", 235, 110, true);
+        ConfigureOption(gamingPriority, "Gaming priority tuning", 25, 138, true);
+        ConfigureOption(fortniteProfile, "Fortnite FPS profile", 235, 138, true);
+        ConfigureOption(tempCleanup, "Clean old temp files", 25, 166, true);
+        ConfigureOption(highPriorityLaunch, "High-priority Fortnite launch", 235, 166, true);
+        foreach (var option in new[] { powerPlan, gameMode, captureOff, gpuScheduling, gamingPriority, fortniteProfile, tempCleanup, highPriorityLaunch })
+            actionCard.Controls.Add(option);
+
+        optimize.Text = "⚡  OPTIMIZE SELECTED"; StyleButton(optimize, true); optimize.SetBounds(25, 201, 200, 38); optimize.Click += async (_, _) => await OptimizeAsync(); actionCard.Controls.Add(optimize);
+        launch.Text = "▶  LAUNCH FORTNITE"; StyleButton(launch, false); launch.SetBounds(240, 201, 205, 38); launch.Click += (_, _) => LaunchFortnite(); actionCard.Controls.Add(launch);
 
         var logCard = Card("ACTIVITY", 35, 445, 470, 220);
         logPanel.FlowDirection = FlowDirection.TopDown; logPanel.WrapContents = false; logPanel.AutoScroll = true; logPanel.BackColor = Panel; logPanel.SetBounds(20, 48, 430, 145); logCard.Controls.Add(logPanel);
@@ -64,6 +77,18 @@ internal sealed class MainForm : Form
         version.Text = UpdateService.VersionText; version.ForeColor = Color.FromArgb(125, 115, 145); version.AutoSize = true; version.Location = new Point(35, 590); Controls.Add(version);
         updateButton.Text = "Check for Updates"; StyleButton(updateButton, false); updateButton.SetBounds(35, 615, 165, 34); updateButton.Click += async (_, _) => await CheckForUpdatesAsync(false); Controls.Add(updateButton);
         var foot = new Label { Text = "No backup/restore module • No Python • Native Windows x64 build", ForeColor = Color.FromArgb(115, 106, 134), AutoSize = true, Location = new Point(550, 625) }; Controls.Add(foot);
+    }
+
+    private void ConfigureOption(CheckBox box, string text, int x, int y, bool enabledByDefault)
+    {
+        box.Text = text;
+        box.Checked = enabledByDefault;
+        box.AutoSize = false;
+        box.Size = new Size(205, 25);
+        box.Location = new Point(x, y);
+        box.ForeColor = Color.White;
+        box.BackColor = Panel;
+        box.Font = new Font("Segoe UI", 8.5f, FontStyle.Regular);
     }
 
     private Panel Card(string heading, int x, int y, int w, int h)
@@ -165,7 +190,10 @@ internal sealed class MainForm : Form
         var progress = new Progress<string>(Log);
         try
         {
-            var changes = await Optimizer.ApplyAsync(progress);
+            var options = new OptimizationOptions(
+                powerPlan.Checked, gameMode.Checked, captureOff.Checked, gpuScheduling.Checked,
+                gamingPriority.Checked, fortniteProfile.Checked, tempCleanup.Checked);
+            var changes = await Optimizer.ApplyAsync(options, progress);
             Optimizer.SetFortniteAutoRegion(progress);
             status.Text = $"Optimization complete • {changes.Count} actions applied";
             Log("Done. Restart Windows if GPU scheduling was changed.");
@@ -182,7 +210,7 @@ internal sealed class MainForm : Form
         try
         {
             Optimizer.SetFortniteAutoRegion(new Progress<string>(Log));
-            Optimizer.LaunchFortnite();
+            Optimizer.LaunchFortnite(highPriorityLaunch.Checked);
             status.Text = "Fortnite launch requested through Epic Games Launcher";
             Log("Launching Fortnite; process priority will switch to High after the game starts.");
         }

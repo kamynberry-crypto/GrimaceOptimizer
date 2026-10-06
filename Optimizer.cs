@@ -4,51 +4,75 @@ using System.Text.RegularExpressions;
 
 namespace GrimaceOptimizer;
 
+internal sealed record OptimizationOptions(
+    bool HighPerformancePower,
+    bool GameMode,
+    bool DisableGameCapture,
+    bool HardwareGpuScheduling,
+    bool GamingPriority,
+    bool FortniteProfile,
+    bool CleanupTempFiles);
+
 internal static class Optimizer
 {
-    public static async Task<List<string>> ApplyAsync(IProgress<string>? progress = null)
+    public static async Task<List<string>> ApplyAsync(OptimizationOptions options, IProgress<string>? progress = null)
     {
         var done = new List<string>();
 
-        await RunAsync("powercfg.exe", "/setactive SCHEME_MIN");
-        done.Add("High Performance power plan enabled");
-        progress?.Report(done[^1]);
-
-        SetDword(Registry.CurrentUser, @"Software\Microsoft\GameBar", "AutoGameModeEnabled", 1);
-        SetDword(Registry.CurrentUser, @"Software\Microsoft\GameBar", "AllowAutoGameMode", 1);
-        done.Add("Windows Game Mode enabled");
-        progress?.Report(done[^1]);
-
-        SetDword(Registry.CurrentUser, @"System\GameConfigStore", "GameDVR_Enabled", 0);
-        SetDword(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\GameDVR", "AppCaptureEnabled", 0);
-        done.Add("Background Game DVR capture disabled");
-        progress?.Report(done[^1]);
-
-        try
+        if (options.HighPerformancePower)
         {
-            SetDword(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Control\GraphicsDrivers", "HwSchMode", 2);
-            done.Add("Hardware-accelerated GPU scheduling requested (restart may be needed)");
-            progress?.Report(done[^1]);
-        }
-        catch
-        {
-            progress?.Report("GPU scheduling setting skipped by Windows");
+            var exit = await RunAsync("powercfg.exe", "/setactive SCHEME_MIN");
+            if (exit == 0) Add(done, "High Performance power plan enabled", progress);
+            else progress?.Report("High Performance power plan could not be changed");
         }
 
-        try
+        if (options.GameMode)
         {
-            using var games = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games", true);
-            games?.SetValue("GPU Priority", 8, RegistryValueKind.DWord);
-            games?.SetValue("Priority", 6, RegistryValueKind.DWord);
-            games?.SetValue("Scheduling Category", "High", RegistryValueKind.String);
-            games?.SetValue("SFIO Priority", "High", RegistryValueKind.String);
-            done.Add("Windows multimedia gaming priority tuned");
-            progress?.Report(done[^1]);
+            SetDword(Registry.CurrentUser, @"Software\Microsoft\GameBar", "AutoGameModeEnabled", 1);
+            SetDword(Registry.CurrentUser, @"Software\Microsoft\GameBar", "AllowAutoGameMode", 1);
+            Add(done, "Windows Game Mode enabled", progress);
         }
-        catch { progress?.Report("Multimedia priority tuning skipped"); }
 
-        OptimizeFortniteConfig(progress, done);
-        CleanupTemp(progress, done);
+        if (options.DisableGameCapture)
+        {
+            SetDword(Registry.CurrentUser, @"System\GameConfigStore", "GameDVR_Enabled", 0);
+            SetDword(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\GameDVR", "AppCaptureEnabled", 0);
+            Add(done, "Background Game DVR capture disabled", progress);
+        }
+
+        if (options.HardwareGpuScheduling)
+        {
+            try
+            {
+                SetDword(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Control\GraphicsDrivers", "HwSchMode", 2);
+                Add(done, "Hardware-accelerated GPU scheduling requested (restart may be needed)", progress);
+            }
+            catch
+            {
+                progress?.Report("GPU scheduling setting skipped by Windows");
+            }
+        }
+
+        if (options.GamingPriority)
+        {
+            try
+            {
+                using var games = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games", true);
+                games?.SetValue("GPU Priority", 8, RegistryValueKind.DWord);
+                games?.SetValue("Priority", 6, RegistryValueKind.DWord);
+                games?.SetValue("Scheduling Category", "High", RegistryValueKind.String);
+                games?.SetValue("SFIO Priority", "High", RegistryValueKind.String);
+                Add(done, "Windows multimedia gaming priority tuned", progress);
+            }
+            catch { progress?.Report("Multimedia priority tuning skipped"); }
+        }
+
+        if (options.FortniteProfile)
+            OptimizeFortniteConfig(progress, done);
+
+        if (options.CleanupTempFiles)
+            CleanupTemp(progress, done);
+
         return done;
     }
 
@@ -67,7 +91,7 @@ internal static class Optimizer
         progress?.Report("Fortnite matchmaking region set to Auto (Epic selects best ping)");
     }
 
-    public static void LaunchFortnite()
+    public static void LaunchFortnite(bool boostPriority = true)
     {
         const string url = "com.epicgames.launcher://apps/fn%3A4fe75bbc5a674f4f9b356b5c90567da5%3AFortnite?action=launch&silent=true";
         try
@@ -78,7 +102,9 @@ internal static class Optimizer
         {
             Process.Start(new ProcessStartInfo("explorer.exe", $"\"{url}\"") { UseShellExecute = true });
         }
-        _ = BoostFortniteProcessWhenReadyAsync();
+
+        if (boostPriority)
+            _ = BoostFortniteProcessWhenReadyAsync();
     }
 
     private static void OptimizeFortniteConfig(IProgress<string>? progress, List<string> done)
@@ -111,8 +137,7 @@ internal static class Optimizer
         foreach (var item in settings)
             text = SetIniValue(text, item.Key, item.Value);
         File.WriteAllText(path, text);
-        done.Add("Fortnite performance profile applied (medium textures for 6 GB VRAM, low effects/shadows, VSync off)");
-        progress?.Report(done[^1]);
+        Add(done, "Fortnite performance profile applied (medium textures for 6 GB VRAM, low effects/shadows, VSync off)", progress);
     }
 
     private static void CleanupTemp(IProgress<string>? progress, List<string> done)
@@ -132,8 +157,7 @@ internal static class Optimizer
             }
         }
         catch { }
-        done.Add($"Temporary file cleanup completed ({removed} old files removed)");
-        progress?.Report(done[^1]);
+        Add(done, $"Temporary file cleanup completed ({removed} old files removed)", progress);
     }
 
     private static async Task BoostFortniteProcessWhenReadyAsync()
@@ -143,12 +167,12 @@ internal static class Optimizer
             await Task.Delay(2000);
             try
             {
-                var procs = Process.GetProcesses().Where(p => p.ProcessName.Contains("FortniteClient-Win64-Shipping", StringComparison.OrdinalIgnoreCase));
+                var procs = Process.GetProcesses().Where(p => p.ProcessName.Contains("FortniteClient-Win64-Shipping", StringComparison.OrdinalIgnoreCase)).ToList();
                 foreach (var p in procs)
                 {
                     try { p.PriorityClass = ProcessPriorityClass.High; } catch { }
                 }
-                if (procs.Any()) return;
+                if (procs.Count > 0) return;
             }
             catch { }
         }
@@ -188,5 +212,11 @@ internal static class Optimizer
             return p.ExitCode;
         }
         catch { return -1; }
+    }
+
+    private static void Add(List<string> done, string message, IProgress<string>? progress)
+    {
+        done.Add(message);
+        progress?.Report(message);
     }
 }
