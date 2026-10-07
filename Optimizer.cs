@@ -1,229 +1,142 @@
 using Microsoft.Win32;
 using System.Diagnostics;
-using System.Text.RegularExpressions;
 
 namespace GrimaceOptimizer;
 
-internal sealed record OptimizationOptions(
+public sealed record OptimizationOptions(
     bool HighPerformancePower,
-    bool GameMode,
-    bool DisableGameCapture,
-    bool HardwareGpuScheduling,
+    bool DisablePowerThrottling,
+    bool Hags,
     bool GamingPriority,
-    bool FortniteProfile,
-    bool CleanupTempFiles,
+    bool VisualPerformance,
+    bool DisableAnimations,
+    bool GameMode,
+    bool DisableGameDvr,
     bool DisableXboxOverlay,
-    bool ClearShaderCache,
+    bool CompetitiveProfile,
+    bool Fullscreen,
+    bool NvidiaReflex,
+    bool AutoRegion,
+    int FrameRateLimit,
     bool FlushDns,
-    bool WindowsVisualEffects,
-    bool HighPriorityLaunch);
+    bool CleanTemp,
+    bool ClearShaderCache,
+    bool HighPriority);
 
-internal static class Optimizer
+public static class Optimizer
 {
-    public static async Task<List<string>> ApplyAsync(OptimizationOptions options, IProgress<string>? progress = null)
+    public static async Task ApplyAsync(OptimizationOptions o, IProgress<string>? progress = null)
     {
-        var done = new List<string>();
+        void P(string s) => progress?.Report(s);
+        if (o.HighPerformancePower) { P("Setting High Performance power plan..."); Run("powercfg.exe", "/setactive SCHEME_MIN"); }
+        if (o.DisablePowerThrottling) { P("Disabling Windows power throttling..."); SetDword(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Control\Power\PowerThrottling", "PowerThrottlingOff", 1); }
+        if (o.Hags) { P("Requesting Hardware-accelerated GPU scheduling..."); SetDword(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Control\GraphicsDrivers", "HwSchMode", 2); }
+        if (o.GamingPriority) { P("Applying gaming priority settings..."); SetGamePriority(); }
+        if (o.VisualPerformance) { P("Reducing Windows visual effects..."); SetDword(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects", "VisualFXSetting", 2); }
+        if (o.DisableAnimations) { P("Disabling window animations..."); SetString(Registry.CurrentUser, @"Control Panel\Desktop\WindowMetrics", "MinAnimate", "0"); }
+        if (o.GameMode) { P("Enabling Windows Game Mode..."); SetDword(Registry.CurrentUser, @"Software\Microsoft\GameBar", "AutoGameModeEnabled", 1); SetDword(Registry.CurrentUser, @"Software\Microsoft\GameBar", "AllowAutoGameMode", 1); }
+        if (o.DisableGameDvr) { P("Disabling Game DVR capture..."); SetDword(Registry.CurrentUser, @"System\GameConfigStore", "GameDVR_Enabled", 0); SetDword(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\GameDVR", "AppCaptureEnabled", 0); }
+        if (o.DisableXboxOverlay) { P("Reducing Xbox Game Bar startup behavior..."); SetDword(Registry.CurrentUser, @"Software\Microsoft\GameBar", "UseNexusForGameBarEnabled", 0); SetDword(Registry.CurrentUser, @"Software\Microsoft\GameBar", "ShowStartupPanel", 0); }
 
-        if (options.HighPerformancePower)
-        {
-            var exit = await RunAsync("powercfg.exe", "/setactive SCHEME_MIN");
-            if (exit == 0) Add(done, "High Performance power plan enabled", progress);
-            else progress?.Report("High Performance power plan could not be changed");
-        }
+        P("Updating Fortnite settings...");
+        var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"FortniteGame\Saved\Config\WindowsClient\GameUserSettings.ini");
+        if (o.CompetitiveProfile) WriteIni(path, "bUseVSync", "False", "bUseDynamicResolution", "False", "sg.AntiAliasingQuality", "0", "sg.ShadowQuality", "0", "sg.GlobalIlluminationQuality", "0", "sg.ReflectionQuality", "0", "sg.PostProcessQuality", "0", "sg.TextureQuality", "1", "sg.EffectsQuality", "0", "sg.FoliageQuality", "0", "sg.ShadingQuality", "0", "sg.ResolutionQuality", "100.000000");
+        if (o.Fullscreen) WriteIni(path, "FullscreenMode", "0", "LastConfirmedFullscreenMode", "0", "PreferredFullscreenMode", "0");
+        if (o.NvidiaReflex) WriteIni(path, "bEnableNvidiaReflex", "True", "NvidiaReflexMode", "1");
+        if (o.FrameRateLimit > 0) WriteIni(path, "FrameRateLimit", o.FrameRateLimit.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        if (o.AutoRegion) WriteIni(path, "PreferredRegion", "Auto");
 
-        if (options.GameMode)
-        {
-            SetDword(Registry.CurrentUser, @"Software\Microsoft\GameBar", "AutoGameModeEnabled", 1);
-            SetDword(Registry.CurrentUser, @"Software\Microsoft\GameBar", "AllowAutoGameMode", 1);
-            Add(done, "Windows Game Mode enabled", progress);
-        }
+        if (o.FlushDns) { P("Flushing DNS cache..."); Run("ipconfig.exe", "/flushdns"); }
+        if (o.CleanTemp) { P("Cleaning old temporary files..."); CleanTemp(); }
+        if (o.ClearShaderCache) { P("Clearing shader cache files..."); ClearDir(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "D3DSCache")); ClearDir(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"NVIDIA\DXCache")); }
 
-        if (options.DisableGameCapture)
-        {
-            SetDword(Registry.CurrentUser, @"System\GameConfigStore", "GameDVR_Enabled", 0);
-            SetDword(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\GameDVR", "AppCaptureEnabled", 0);
-            Add(done, "Background Game DVR capture disabled", progress);
-        }
-
-        if (options.HardwareGpuScheduling)
-        {
-            try
-            {
-                SetDword(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Control\GraphicsDrivers", "HwSchMode", 2);
-                Add(done, "Hardware-accelerated GPU scheduling requested (restart may be needed)", progress);
-            }
-            catch { progress?.Report("GPU scheduling setting skipped by Windows"); }
-        }
-
-        if (options.GamingPriority)
-        {
-            try
-            {
-                using var games = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games", true);
-                games?.SetValue("GPU Priority", 8, RegistryValueKind.DWord);
-                games?.SetValue("Priority", 6, RegistryValueKind.DWord);
-                games?.SetValue("Scheduling Category", "High", RegistryValueKind.String);
-                games?.SetValue("SFIO Priority", "High", RegistryValueKind.String);
-                Add(done, "Windows multimedia gaming priority tuned", progress);
-            }
-            catch { progress?.Report("Multimedia priority tuning skipped"); }
-        }
-
-        if (options.FortniteProfile) OptimizeFortniteConfig(progress, done);
-        if (options.CleanupTempFiles) CleanupTemp(progress, done);
-        if (options.DisableXboxOverlay) DisableXboxOverlay(progress, done);
-        if (options.ClearShaderCache) ClearShaderCache(progress, done);
-        if (options.FlushDns)
-        {
-            var exit = await RunAsync("ipconfig.exe", "/flushdns");
-            if (exit == 0) Add(done, "DNS cache flushed", progress);
-            else progress?.Report("DNS cache could not be flushed");
-        }
-        if (options.WindowsVisualEffects) OptimizeVisualEffects(progress, done);
-
-        return done;
+        P("Optimization complete.");
+        await Task.CompletedTask;
     }
 
-    public static void SetFortniteAutoRegion(IProgress<string>? progress = null)
-    {
-        string path = GetFortniteConfigPath();
-        if (!File.Exists(path))
-        {
-            progress?.Report("Fortnite config not found yet — launch Fortnite once first");
-            return;
-        }
-        MakeWritable(path);
-        string text = File.ReadAllText(path);
-        text = SetIniValue(text, "PreferredRegion", "Auto");
-        File.WriteAllText(path, text);
-        progress?.Report("Fortnite matchmaking region set to Auto (Epic selects best ping)");
-    }
-
-    public static void LaunchFortnite(bool boostPriority = true)
-    {
-        const string url = "com.epicgames.launcher://apps/fn%3A4fe75bbc5a674f4f9b356b5c90567da5%3AFortnite?action=launch&silent=true";
-        try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
-        catch { Process.Start(new ProcessStartInfo("explorer.exe", $"\"{url}\"") { UseShellExecute = true }); }
-        if (boostPriority) _ = BoostFortniteProcessWhenReadyAsync();
-    }
-
-    private static void OptimizeFortniteConfig(IProgress<string>? progress, List<string> done)
-    {
-        string path = GetFortniteConfigPath();
-        if (!File.Exists(path)) { progress?.Report("Fortnite config not found — game-specific settings skipped"); return; }
-        MakeWritable(path);
-        string text = File.ReadAllText(path);
-        var settings = new Dictionary<string, string>
-        {
-            ["bUseVSync"] = "False",
-            ["bUseDynamicResolution"] = "False",
-            ["FrameRateLimit"] = "0.000000",
-            ["sg.AntiAliasingQuality"] = "0",
-            ["sg.ShadowQuality"] = "0",
-            ["sg.GlobalIlluminationQuality"] = "0",
-            ["sg.ReflectionQuality"] = "0",
-            ["sg.PostProcessQuality"] = "0",
-            ["sg.TextureQuality"] = "1",
-            ["sg.EffectsQuality"] = "0",
-            ["sg.FoliageQuality"] = "0",
-            ["sg.ShadingQuality"] = "0",
-            ["PreferredRegion"] = "Auto"
-        };
-        foreach (var item in settings) text = SetIniValue(text, item.Key, item.Value);
-        File.WriteAllText(path, text);
-        Add(done, "Fortnite performance profile applied (medium textures for 6 GB VRAM, low effects/shadows, VSync off)", progress);
-    }
-
-    private static void DisableXboxOverlay(IProgress<string>? progress, List<string> done)
+    public static void LaunchFortnite()
     {
         try
         {
-            SetDword(Registry.CurrentUser, @"Software\Microsoft\GameBar", "UseNexusForGameBarEnabled", 0);
-            SetDword(Registry.CurrentUser, @"Software\Microsoft\GameBar", "ShowStartupPanel", 0);
-            Add(done, "Xbox Game Bar overlay startup disabled", progress);
-        }
-        catch { progress?.Report("Xbox Game Bar overlay setting skipped"); }
-    }
-
-    private static void ClearShaderCache(IProgress<string>? progress, List<string> done)
-    {
-        int removed = 0;
-        var paths = new[]
-        {
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "D3DSCache"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NVIDIA", "DXCache")
-        };
-        foreach (var dir in paths)
-        {
-            try
+            Process.Start(new ProcessStartInfo
             {
-                if (!Directory.Exists(dir)) continue;
-                foreach (var file in Directory.EnumerateFiles(dir).Take(1500))
-                {
-                    try { File.Delete(file); removed++; } catch { }
-                }
-            }
-            catch { }
-        }
-        Add(done, $"Graphics shader cache cleanup completed ({removed} files removed where available)", progress);
-    }
-
-    private static void OptimizeVisualEffects(IProgress<string>? progress, List<string> done)
-    {
-        try
-        {
-            using var key = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects", true);
-            key?.SetValue("VisualFXSetting", 2, RegistryValueKind.DWord);
-            Add(done, "Windows visual-effects profile set for performance", progress);
-        }
-        catch { progress?.Report("Windows visual-effects setting skipped"); }
-    }
-
-    private static void CleanupTemp(IProgress<string>? progress, List<string> done)
-    {
-        string temp = Path.GetTempPath(); int removed = 0;
-        try
-        {
-            foreach (var file in Directory.EnumerateFiles(temp).Take(1200))
-            {
-                try { var info = new FileInfo(file); if (info.LastWriteTimeUtc < DateTime.UtcNow.AddDays(-2)) { info.Delete(); removed++; } } catch { }
-            }
+                FileName = "com.epicgames.launcher://apps/fn%3A4fe75bbc5a674f4f9b356b5c90567da5%3AFortnite?action=launch&silent=true",
+                UseShellExecute = true
+            });
         }
         catch { }
-        Add(done, $"Temporary file cleanup completed ({removed} old files removed)", progress);
-    }
-
-    private static async Task BoostFortniteProcessWhenReadyAsync()
-    {
-        for (int i = 0; i < 60; i++)
+        _ = Task.Run(async () =>
         {
-            await Task.Delay(2000);
-            try
+            await Task.Delay(7000);
+            foreach (var p in Process.GetProcessesByName("FortniteClient-Win64-Shipping"))
             {
-                var procs = Process.GetProcesses().Where(p => p.ProcessName.Contains("FortniteClient-Win64-Shipping", StringComparison.OrdinalIgnoreCase)).ToList();
-                foreach (var p in procs) { try { p.PriorityClass = ProcessPriorityClass.High; } catch { } }
-                if (procs.Count > 0) return;
+                try { p.PriorityClass = ProcessPriorityClass.High; } catch { }
             }
-            catch { }
+        });
+    }
+
+    static void SetGamePriority()
+    {
+        const string path = @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games";
+        SetDword(Registry.LocalMachine, path, "GPU Priority", 8);
+        SetDword(Registry.LocalMachine, path, "Priority", 6);
+        SetString(Registry.LocalMachine, path, "Scheduling Category", "High");
+        SetString(Registry.LocalMachine, path, "SFIO Priority", "High");
+    }
+
+    static void WriteIni(string path, params string[] pairs)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var lines = File.Exists(path) ? File.ReadAllLines(path).ToList() : new List<string>();
+        for (int i = 0; i + 1 < pairs.Length; i += 2)
+        {
+            var key = pairs[i]; var value = pairs[i + 1];
+            var idx = lines.FindIndex(x => x.TrimStart().StartsWith(key + "=", StringComparison.OrdinalIgnoreCase));
+            if (idx >= 0) lines[idx] = key + "=" + value;
+            else lines.Add(key + "=" + value);
         }
+        File.WriteAllLines(path, lines);
     }
 
-    private static string GetFortniteConfigPath() => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FortniteGame", "Saved", "Config", "WindowsClient", "GameUserSettings.ini");
-
-    private static string SetIniValue(string text, string key, string value)
+    static void CleanTemp()
     {
-        string pattern = $@"(?m)^\s*{Regex.Escape(key)}\s*=.*$";
-        string replacement = $"{key}={value}";
-        if (Regex.IsMatch(text, pattern, RegexOptions.IgnoreCase)) return Regex.Replace(text, pattern, replacement, RegexOptions.IgnoreCase);
-        return text.TrimEnd() + Environment.NewLine + replacement + Environment.NewLine;
+        try
+        {
+            var cutoff = DateTime.Now.AddDays(-2);
+            var dirs = new[] { Path.GetTempPath(), Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Temp") };
+            int count = 0;
+            foreach (var dir in dirs.Distinct())
+            {
+                if (!Directory.Exists(dir)) continue;
+                foreach (var file in Directory.EnumerateFiles(dir, "*", SearchOption.TopDirectoryOnly))
+                {
+                    if (count >= 1200) break;
+                    try { if (File.GetLastWriteTime(file) < cutoff) { File.Delete(file); count++; } } catch { }
+                }
+            }
+        } catch { }
     }
 
-    private static void MakeWritable(string path) { try { File.SetAttributes(path, File.GetAttributes(path) & ~FileAttributes.ReadOnly); } catch { } }
-    private static void SetDword(RegistryKey hive, string subkey, string name, int value) { using var key = hive.CreateSubKey(subkey, true); key?.SetValue(name, value, RegistryValueKind.DWord); }
-    private static async Task<int> RunAsync(string file, string args)
+    static void ClearDir(string dir)
     {
-        try { var psi = new ProcessStartInfo(file, args) { UseShellExecute = false, CreateNoWindow = true }; using var p = Process.Start(psi)!; await p.WaitForExitAsync(); return p.ExitCode; }
-        catch { return -1; }
+        try
+        {
+            if (!Directory.Exists(dir)) return;
+            foreach (var f in Directory.EnumerateFiles(dir, "*", SearchOption.TopDirectoryOnly))
+                try { File.Delete(f); } catch { }
+        } catch { }
     }
-    private static void Add(List<string> done, string message, IProgress<string>? progress) { done.Add(message); progress?.Report(message); }
+
+    static void Run(string exe, string args)
+    {
+        try { using var p = Process.Start(new ProcessStartInfo(exe, args) { CreateNoWindow = true, UseShellExecute = false }); p?.WaitForExit(5000); } catch { }
+    }
+    static void SetDword(RegistryKey root, string path, string name, int value)
+    {
+        try { using var key = root.CreateSubKey(path); if (key != null) key.SetValue(name, value, RegistryValueKind.DWord); } catch { }
+    }
+    static void SetString(RegistryKey root, string path, string name, string value)
+    {
+        try { using var key = root.CreateSubKey(path); if (key != null) key.SetValue(name, value, RegistryValueKind.String); } catch { }
+    }
 }
